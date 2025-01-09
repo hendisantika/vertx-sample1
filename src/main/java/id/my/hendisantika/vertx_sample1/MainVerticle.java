@@ -2,6 +2,7 @@ package id.my.hendisantika.vertx_sample1;
 
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonArray;
@@ -199,6 +200,29 @@ public class MainVerticle extends AbstractVerticle {
         connection.execute(ar.result().toString(),
           ar2 -> future.handle(ar2.map(connection))
         );
+      }
+    });
+    return future;
+  }
+
+  private Future<SQLConnection> createSomeDataIfNone(SQLConnection connection) {
+    Future<SQLConnection> future = Future.future();
+    connection.query("SELECT * FROM employees", select -> {
+      if (select.failed()) {
+        future.fail(select.cause());
+      } else {
+        if (select.result().getResults().isEmpty()) {
+          Employee Employee1 = new Employee("Abhishek",
+            "Software Engineer");
+          Employee Employee2 = new Employee("Sunil",
+            "Release Manager");
+          Future<Employee> insertion1 = insert(connection, Employee1, false);
+          Future<Employee> insertion2 = insert(connection, Employee2, false);
+          CompositeFuture.all(insertion1, insertion2)
+            .setHandler(r -> future.handle(r.map(connection)));
+        } else {
+          future.complete(connection);
+        }
       }
     });
     return future;
