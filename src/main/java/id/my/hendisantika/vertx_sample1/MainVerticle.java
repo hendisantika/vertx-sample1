@@ -168,4 +168,25 @@ public class MainVerticle extends AbstractVerticle {
       });
     return future;
   }
+
+  private Future<Void> delete(SQLConnection connection, String id) {
+    Future<Void> future = Future.future();
+    String sql = "DELETE FROM employees WHERE id = ?";
+    connection.updateWithParams(sql,
+      new JsonArray().add(Integer.valueOf(id)),
+      ar -> {
+        connection.close();
+        if (ar.failed()) {
+          future.fail(ar.cause());
+        } else {
+          if (ar.result().getUpdated() == 0) {
+            future.fail(new NoSuchElementException("Unknown Employee " + id));
+          } else {
+            future.complete();
+          }
+        }
+      }
+    );
+    return future;
+  }
 }
