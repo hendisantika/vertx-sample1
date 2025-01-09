@@ -12,6 +12,7 @@ import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.sql.SQLOptions;
 import io.vertx.ext.sql.UpdateResult;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 
@@ -227,4 +228,13 @@ public class MainVerticle extends AbstractVerticle {
     });
     return future;
   }
+
+  // ---- HTTP Actions ----
+
+  private void getAll(RoutingContext rc) {
+    connect()
+      .compose(this::query)
+      .setHandler(ok(rc));
+  }
+
 }
