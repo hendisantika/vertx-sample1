@@ -42,4 +42,17 @@ public class ApiHelper {
     return writeJsonResponse(rc, 201);
   }
 
+  static Handler<AsyncResult<Void>> noContent(RoutingContext rc) {
+    return ar -> {
+      if (ar.failed()) {
+        if (ar.cause() instanceof NoSuchElementException) {
+          rc.response().setStatusCode(404).end(ar.cause().getMessage());
+        } else {
+          rc.fail(ar.cause());
+        }
+      } else {
+        rc.response().setStatusCode(204).end();
+      }
+    };
+  }
 }
