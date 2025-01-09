@@ -4,6 +4,7 @@ import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.jdbc.JDBCClient;
 import io.vertx.ext.sql.SQLConnection;
@@ -91,4 +92,22 @@ public class MainVerticle extends AbstractVerticle {
     );
     return future;
   }
+
+  private Future<Employee> insert(SQLConnection connection, Employee Employee, boolean closeConnection) {
+    Future<Employee> future = Future.future();
+    String sql = "INSERT INTO employees (fullname, designation) VALUES (?, ?)";
+    connection.updateWithParams(sql,
+      new JsonArray().add(Employee.getFullName()).add(Employee.getDesignation()),
+      ar -> {
+        if (closeConnection) {
+          connection.close();
+        }
+        future.handle(
+          ar.map(res -> new Employee(res.getKeys().getLong(0), Employee.getFullName(), Employee.getDesignation()))
+        );
+      }
+    );
+    return future;
+  }
+
 }
