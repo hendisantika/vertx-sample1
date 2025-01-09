@@ -237,4 +237,10 @@ public class MainVerticle extends AbstractVerticle {
       .setHandler(ok(rc));
   }
 
+  private void addOne(RoutingContext rc) {
+    Employee Employee = rc.getBodyAsJson().mapTo(Employee.class);
+    connect()
+      .compose(connection -> insert(connection, Employee, true))
+      .setHandler(created(rc));
+  }
 }
