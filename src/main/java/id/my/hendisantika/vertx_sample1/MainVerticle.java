@@ -66,4 +66,17 @@ public class MainVerticle extends AbstractVerticle {
       })
       .setHandler(fut);
   }
+
+  private Future<Void> createHttpServer(JsonObject config, Router router) {
+    Future<Void> future = Future.future();
+    vertx
+      .createHttpServer()
+      .requestHandler(router::accept)
+      .listen(
+        config.getInteger("HTTP_PORT", 8080),
+        res -> future.handle(res.mapEmpty())
+      );
+    return future;
+  }
+
 }
