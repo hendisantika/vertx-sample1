@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Employee List</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/js/bootstrap.min.js"></script>
+</head>
+<body>
+<div class="container" role="main">
+  <div class="jumbotron">
+    <h1>My VertX CRUD APP</h1>
+
+    <p>Just an example of simple CRUD application developed using Eclipse Vert.x and Vertx Web.</p>
+  </div>
+  <div class="page-header">
+    <div class="row">
+      <div class="col-md-12">
+        <h1>Articles</h1>
+        <button class="pull-right btn btn-primary product-add" data-action="add" data-target="#productModal"
+                data-toggle="modal">
+          <span class="glyphicon glyphicon-plus"></span> Add a new Employee
+        </button>
+        <table class="table table-striped">
+          <thead>
+          <tr>
+            <th>#</th>
+            <th>Full Name</th>
+            <th>Designation</th>
+            <th>Actions</th>
+          </tr>
+          </thead>
+          <tbody id="content">
+          <!-- filled using Ajax -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  $(function () {
+    load();
+    initModal();
+  });
+
+  function create(fullName, designation) {
+    $.post("/api/Employees", JSON.stringify({fullName: fullName, designation: designation}), function () {
+      load();
+    }, "json");
+  }
+
+  function remove(id) {
+    $.ajax({
+      method: "DELETE",
+      url: "/api/Employees/" + id
+    }).done(function () {
+      load();
+    });
+  }
+
+  function update(id, fullName, designation) {
+    $.ajax({
+      method: "PUT",
+      url: "/api/Employees/" + id,
+      data: JSON.stringify({fullName: fullName, designation: designation})
+    }).done(function () {
+      load();
+    });
+  }
+
+  function load() {
+    $("#content").children().remove();
+    $.getJSON("/api/Employees", function (data) {
+      $.each(data, function (key, val) {
+        $("<tr><td>" + val.id + "</td><td>" + val.fullName + "</td><td>" +
+          "<a href='" + val.designation + "'>" + val.designation + "</a></td>" +
+          "<td>" +
+          "<button data-action='edit' class='btn btn-primary btn-sm product-edit' " +
+          "data-toggle='modal' " +
+          "data-target='#productModal' " +
+          "data-title='" + val.fullName + "' " +
+          "data-url='" + val.designation + "' " +
+          "data-id='" + val.id + "'>" +
+          "<span class='glyphicon glyphicon-pencil'></span>" +
+          "</button>" +
+          "&nbsp;" +
+          "<button class='btn btn-danger btn-sm product-delete' data-id='" + val.id + "'>" +
+          "   <span class='glyphicon glyphicon-minus'></span>" +
+          "</button>" +
+          "</td>" +
+          "</tr>").appendTo("#content");
+      });
+      initCallbacks();
+    });
+  }
+
+  function initCallbacks() {
+    $(".product-delete").unbind().click(function () {
+      var id = $(this).data("id");
+      remove(id);
+    });
+  }
+
+  function initModal() {
+    $("#productModal").on('show.bs.modal', function (event) {
+      var button = $(event.relatedTarget);
+      var action = button.data('action');
+      var id = button.data('id');
+      var productAction = $("#productAction");
+      productAction.unbind();
+      var modal = $(this);
+      if (action === "add") {
+        modal.find('.modal-title').text("Add Employee");
+        modal.find('#product-title').val("");
+        modal.find('#product-url').val("");
+        productAction.click(function () {
+          create($("#product-title").val(), $("#product-url").val());
+          $('#productModal').modal('toggle');
+        });
+      } else {
+        modal.find('.modal-title').text("Edit an article");
+        modal.find('#product-title').val(button.data("fullName"));
+        modal.find('#product-url').val(button.data("designation"));
+        productAction.click(function () {
+          update(id, $("#product-title").val(), $("#product-url").val());
+          $('#productModal').modal('toggle');
+        });
+      }
+    })
+  }
+</script>
+<div class="modal fade" id="productModal" role="dialog" tabindex="-1">
+  <div class="modal-dialog" role="dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button class="close" data-dismiss="modal" type="button"><span>&times;</span></button>
+        <h4 class="modal-title" id="productModalTitle">Add an Employee</h4>
+      </div>
+      <div class="modal-body">
+        <form>
+          <div class="form-group">
+            <label class="control-label" for="product-title">Full Name:</label>
+            <input class="form-control" id="product-title" type="text">
+          </div>
+          <div class="form-group">
+            <label class="control-label" for="product-url">Designation:</label>
+            <input class="form-control" id="product-url" type="text">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" data-dismiss="modal" type="button">Cancel</button>
+        <button class="btn btn-primary" id="productAction" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
