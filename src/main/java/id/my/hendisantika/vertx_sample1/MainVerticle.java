@@ -20,6 +20,10 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
+import static id.my.hendisantika.vertx_sample1.ApiHelper.created;
+import static id.my.hendisantika.vertx_sample1.ApiHelper.noContent;
+import static id.my.hendisantika.vertx_sample1.ApiHelper.ok;
+
 public class MainVerticle extends AbstractVerticle {
 
   private JDBCClient jdbc;
@@ -249,5 +253,12 @@ public class MainVerticle extends AbstractVerticle {
     connect()
       .compose(connection -> delete(connection, id))
       .setHandler(noContent(rc));
+  }
+
+  private void getOne(RoutingContext rc) {
+    String id = rc.pathParam("id");
+    connect()
+      .compose(connection -> queryOne(connection, id))
+      .setHandler(ok(rc));
   }
 }
