@@ -261,4 +261,12 @@ public class MainVerticle extends AbstractVerticle {
       .compose(connection -> queryOne(connection, id))
       .setHandler(ok(rc));
   }
+
+  private void updateOne(RoutingContext rc) {
+    String id = rc.request().getParam("id");
+    Employee Employee = rc.getBodyAsJson().mapTo(Employee.class);
+    connect()
+      .compose(connection -> update(connection, id, Employee))
+      .setHandler(noContent(rc));
+  }
 }
