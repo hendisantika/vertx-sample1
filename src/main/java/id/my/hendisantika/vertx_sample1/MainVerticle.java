@@ -9,6 +9,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.jdbc.JDBCClient;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.sql.SQLOptions;
+import io.vertx.ext.sql.UpdateResult;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
@@ -144,6 +145,27 @@ public class MainVerticle extends AbstractVerticle {
         })
       );
     });
+    return future;
+  }
+
+  private Future<Void> update(SQLConnection connection, String id, Employee Employee) {
+    Future<Void> future = Future.future();
+    String sql = "UPDATE employees SET title = ?, url = ? WHERE id = ?";
+    connection.updateWithParams(sql, new JsonArray().add(Employee.getFullName()).add(Employee.getDesignation())
+        .add(Integer.valueOf(id)),
+      ar -> {
+        connection.close();
+        if (ar.failed()) {
+          future.fail(ar.cause());
+        } else {
+          UpdateResult ur = ar.result();
+          if (ur.getUpdated() == 0) {
+            future.fail(new NoSuchElementException("No Employee with id " + id));
+          } else {
+            future.complete();
+          }
+        }
+      });
     return future;
   }
 }
