@@ -14,6 +14,7 @@ import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
 public class MainVerticle extends AbstractVerticle {
@@ -126,4 +127,23 @@ public class MainVerticle extends AbstractVerticle {
     return future;
   }
 
+  private Future<Employee> queryOne(SQLConnection connection, String id) {
+    Future<Employee> future = Future.future();
+    String sql = "SELECT * FROM employees WHERE id = ?";
+    connection.queryWithParams(sql, new JsonArray().add(Integer.valueOf(id)), result -> {
+      connection.close();
+      future.handle(
+        result.map(rs -> {
+          List<JsonObject> rows = rs.getRows();
+          if (rows.size() == 0) {
+            throw new NoSuchElementException("No Employee with id " + id);
+          } else {
+            JsonObject row = rows.get(0);
+            return new Employee(row);
+          }
+        })
+      );
+    });
+    return future;
+  }
 }
