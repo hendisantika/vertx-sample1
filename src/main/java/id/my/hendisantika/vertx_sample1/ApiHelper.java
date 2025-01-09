@@ -37,4 +37,9 @@ public class ApiHelper {
   static <T> Handler<AsyncResult<T>> ok(RoutingContext rc) {
     return writeJsonResponse(rc, 200);
   }
+
+  static <T> Handler<AsyncResult<T>> created(RoutingContext rc) {
+    return writeJsonResponse(rc, 201);
+  }
+
 }
