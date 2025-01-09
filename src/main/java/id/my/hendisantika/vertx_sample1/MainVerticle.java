@@ -13,6 +13,9 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 public class MainVerticle extends AbstractVerticle {
 
   private JDBCClient jdbc;
@@ -104,6 +107,19 @@ public class MainVerticle extends AbstractVerticle {
         }
         future.handle(
           ar.map(res -> new Employee(res.getKeys().getLong(0), Employee.getFullName(), Employee.getDesignation()))
+        );
+      }
+    );
+    return future;
+  }
+
+  private Future<List<Employee>> query(SQLConnection connection) {
+    Future<List<Employee>> future = Future.future();
+    connection.query("SELECT * FROM employees", result -> {
+        connection.close();
+        future.handle(
+          result.map(rs -> rs.getRows()
+            .stream().map(Employee::new).collect(Collectors.toList()))
         );
       }
     );
