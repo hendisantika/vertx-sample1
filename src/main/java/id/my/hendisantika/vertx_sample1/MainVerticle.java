@@ -243,4 +243,11 @@ public class MainVerticle extends AbstractVerticle {
       .compose(connection -> insert(connection, Employee, true))
       .setHandler(created(rc));
   }
+
+  private void deleteOne(RoutingContext rc) {
+    String id = rc.pathParam("id");
+    connect()
+      .compose(connection -> delete(connection, id))
+      .setHandler(noContent(rc));
+  }
 }
