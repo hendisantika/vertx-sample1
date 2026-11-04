@@ -21,11 +21,7 @@ public class ApiHelper {
   private static <T> Handler<AsyncResult<T>> writeJsonResponse(RoutingContext context, int status) {
     return ar -> {
       if (ar.failed()) {
-        if (ar.cause() instanceof NoSuchElementException) {
-          context.response().setStatusCode(404).end(ar.cause().getMessage());
-        } else {
-          context.fail(ar.cause());
-        }
+        handleFailure(context, ar.cause());
       } else {
         context.response().setStatusCode(status)
           .putHeader("content-type", "application/json; charset=utf-8")
@@ -45,14 +41,20 @@ public class ApiHelper {
   static Handler<AsyncResult<Void>> noContent(RoutingContext rc) {
     return ar -> {
       if (ar.failed()) {
-        if (ar.cause() instanceof NoSuchElementException) {
-          rc.response().setStatusCode(404).end(ar.cause().getMessage());
-        } else {
-          rc.fail(ar.cause());
-        }
+        handleFailure(rc, ar.cause());
       } else {
         rc.response().setStatusCode(204).end();
       }
     };
+  }
+
+  private static void handleFailure(RoutingContext rc, Throwable cause) {
+    if (cause instanceof NoSuchElementException) {
+      rc.response().setStatusCode(404).end(cause.getMessage());
+    } else if (cause instanceof IllegalArgumentException) {
+      rc.response().setStatusCode(400).end(cause.getMessage());
+    } else {
+      rc.fail(cause);
+    }
   }
 }

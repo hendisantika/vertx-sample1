@@ -1,14 +1,6 @@
-CREATE TABLE if NOT EXISTS Employees
+CREATE TABLE IF NOT EXISTS employees
 (
-  id
-  SERIAL
-  PRIMARY
-  KEY,
-  fullName
-  VARCHAR
-(
-  200
-) NOT NULL, designation VARCHAR
-(
-  200
-) NOT NULL)
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  fullName    VARCHAR(200) NOT NULL,
+  designation VARCHAR(200) NOT NULL
+)

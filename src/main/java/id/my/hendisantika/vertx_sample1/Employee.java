@@ -37,10 +37,17 @@ public class Employee {
 
   public Employee(JsonObject json) {
     this(
-      json.getInteger("id", -1),
+      json.getLong("id", -1L),
       json.getString("fullName"),
       json.getString("designation")
     );
+  }
+
+  public JsonObject toJson() {
+    return new JsonObject()
+      .put("id", id)
+      .put("fullName", fullName)
+      .put("designation", designation);
   }
 
   public long getId() {

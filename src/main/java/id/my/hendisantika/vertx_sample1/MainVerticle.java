@@ -1,272 +1,222 @@
 package id.my.hendisantika.vertx_sample1;
 
 import io.vertx.config.ConfigRetriever;
-import io.vertx.core.AbstractVerticle;
-import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
-import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.VerticleBase;
+import io.vertx.core.http.HttpServer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.jdbc.JDBCClient;
-import io.vertx.ext.sql.SQLConnection;
-import io.vertx.ext.sql.SQLOptions;
-import io.vertx.ext.sql.UpdateResult;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
+import io.vertx.jdbcclient.JDBCConnectOptions;
+import io.vertx.jdbcclient.JDBCPool;
+import io.vertx.sqlclient.Pool;
+import io.vertx.sqlclient.PoolOptions;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.RowSet;
+import io.vertx.sqlclient.SqlClient;
+import io.vertx.sqlclient.Tuple;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.stream.Collectors;
 
 import static id.my.hendisantika.vertx_sample1.ApiHelper.created;
 import static id.my.hendisantika.vertx_sample1.ApiHelper.noContent;
 import static id.my.hendisantika.vertx_sample1.ApiHelper.ok;
 
-public class MainVerticle extends AbstractVerticle {
+/**
+ * Created by IntelliJ IDEA.
+ * Project : vertx-sample1
+ * User: hendisantika
+ * Email: hendisantika@gmail.com
+ * Telegram : @hendisantika34
+ * Link : s.id/hendisantika
+ * Date: 05/11/26
+ * Time: 05.59
+ */
+public class MainVerticle extends VerticleBase {
 
-  private JDBCClient jdbc;
+  private static final String SELECT_ALL = "SELECT id, fullName, designation FROM employees";
+  private static final String SELECT_ONE = SELECT_ALL + " WHERE id = ?";
+  private static final String INSERT = "INSERT INTO employees (fullName, designation) VALUES (?, ?)";
+  private static final String UPDATE = "UPDATE employees SET fullName = ?, designation = ? WHERE id = ?";
+  private static final String DELETE = "DELETE FROM employees WHERE id = ?";
+
+  private Pool pool;
+  private HttpServer server;
 
   @Override
-  public void start(Future<Void> fut) {
-    // Create a router object.
+  public Future<?> start() {
     Router router = Router.router(vertx);
 
-    // Bind "/" to our hello message - so we are still compatible.
-    router.route("/").handler(routingContext -> {
-      HttpServerResponse response = routingContext.response();
-      response
-        .putHeader("content-type", "text/html")
-        .end("<h1>Hello from my first Vert.x 3 application</h1>");
-    });
+    router.route("/").handler(rc -> rc.response()
+      .putHeader("content-type", "text/html")
+      .end("<h1>Hello from my first Vert.x 5 application</h1>"));
 
     // Serve static resources from the /assets directory
     router.route("/assets/*").handler(StaticHandler.create("assets"));
 
-    //My REST End points for my CRUD APP
+    // REST endpoints for the CRUD app
+    router.route("/api/Employees*").handler(BodyHandler.create());
     router.get("/api/Employees").handler(this::getAll);
     router.get("/api/Employees/:id").handler(this::getOne);
-    router.route("/api/Employees*").handler(BodyHandler.create());
     router.post("/api/Employees").handler(this::addOne);
-    router.delete("/api/Employees/:id").handler(this::deleteOne);
     router.put("/api/Employees/:id").handler(this::updateOne);
+    router.delete("/api/Employees/:id").handler(this::deleteOne);
 
     ConfigRetriever retriever = ConfigRetriever.create(vertx);
 
-
-    ConfigRetriever.getConfigAsFuture(retriever)
+    return retriever.getConfig()
       .compose(config -> {
-        jdbc = JDBCClient.createShared(vertx, new JsonObject()
-          .put("url", "jdbc:mysql://localhost:3306/test")
-          .put("user", "root")
-          .put("password", "root")
-          .put("driver_class", "com.mysql.jdbc.Driver")
-          .put("max_pool_size", 30));
+        pool = JDBCPool.pool(vertx,
+          new JDBCConnectOptions()
+            .setJdbcUrl(config.getString("url", "jdbc:mysql://localhost:3306/test"))
+            .setUser(config.getString("user", "root"))
+            .setPassword(config.getString("password", "root")),
+          new PoolOptions().setMaxSize(config.getInteger("max_pool_size", 30)));
 
-        return connect()
-          .compose(connection -> {
-            Future<Void> future = Future.future();
-            createTableIfNeeded(connection)
-              .compose(this::createSomeDataIfNone)
-              .setHandler(x -> {
-                connection.close();
-                future.handle(x.mapEmpty());
-              });
-            return future;
-          })
-          .compose(v -> createHttpServer(config, router));
-
+        return createTableIfNeeded()
+          .compose(v -> createSomeDataIfNone())
+          .compose(v -> vertx.createHttpServer()
+            .requestHandler(router)
+            .listen(config.getInteger("HTTP_PORT", 8080)));
       })
-      .setHandler(fut);
+      .onSuccess(s -> server = s);
   }
 
-  private Future<Void> createHttpServer(JsonObject config, Router router) {
-    Future<Void> future = Future.future();
-    vertx
-      .createHttpServer()
-      .requestHandler(router::accept)
-      .listen(
-        config.getInteger("HTTP_PORT", 8080),
-        res -> future.handle(res.mapEmpty())
-      );
-    return future;
+  @Override
+  public Future<?> stop() {
+    return pool == null ? Future.succeededFuture() : pool.close();
   }
 
-  private Future<SQLConnection> connect() {
-    Future<SQLConnection> future = Future.future();
-    jdbc.getConnection(ar ->
-      future.handle(ar.map(c ->
-          c.setOptions(new SQLOptions().setAutoGeneratedKeys(true))
-        )
-      )
-    );
-    return future;
+  /**
+   * Actual port the HTTP server is bound to (useful when configured with port 0).
+   */
+  public int actualPort() {
+    return server == null ? -1 : server.actualPort();
   }
 
-  private Future<Employee> insert(SQLConnection connection, Employee Employee, boolean closeConnection) {
-    Future<Employee> future = Future.future();
-    String sql = "INSERT INTO employees (fullname, designation) VALUES (?, ?)";
-    connection.updateWithParams(sql,
-      new JsonArray().add(Employee.getFullName()).add(Employee.getDesignation()),
-      ar -> {
-        if (closeConnection) {
-          connection.close();
+  // ---- Persistence ----
+
+  private Future<Void> createTableIfNeeded() {
+    return vertx.fileSystem().readFile("table.sql")
+      .compose(sql -> pool.query(sql.toString()).execute())
+      .mapEmpty();
+  }
+
+  private Future<Void> createSomeDataIfNone() {
+    return pool.query(SELECT_ALL).execute()
+      .compose(rows -> {
+        if (rows.size() > 0) {
+          return Future.succeededFuture();
         }
-        future.handle(
-          ar.map(res -> new Employee(res.getKeys().getLong(0), Employee.getFullName(), Employee.getDesignation()))
-        );
-      }
-    );
-    return future;
-  }
-
-  private Future<List<Employee>> query(SQLConnection connection) {
-    Future<List<Employee>> future = Future.future();
-    connection.query("SELECT * FROM employees", result -> {
-        connection.close();
-        future.handle(
-          result.map(rs -> rs.getRows()
-            .stream().map(Employee::new).collect(Collectors.toList()))
-        );
-      }
-    );
-    return future;
-  }
-
-  private Future<Employee> queryOne(SQLConnection connection, String id) {
-    Future<Employee> future = Future.future();
-    String sql = "SELECT * FROM employees WHERE id = ?";
-    connection.queryWithParams(sql, new JsonArray().add(Integer.valueOf(id)), result -> {
-      connection.close();
-      future.handle(
-        result.map(rs -> {
-          List<JsonObject> rows = rs.getRows();
-          if (rows.size() == 0) {
-            throw new NoSuchElementException("No Employee with id " + id);
-          } else {
-            JsonObject row = rows.get(0);
-            return new Employee(row);
-          }
-        })
-      );
-    });
-    return future;
-  }
-
-  private Future<Void> update(SQLConnection connection, String id, Employee Employee) {
-    Future<Void> future = Future.future();
-    String sql = "UPDATE employees SET title = ?, url = ? WHERE id = ?";
-    connection.updateWithParams(sql, new JsonArray().add(Employee.getFullName()).add(Employee.getDesignation())
-        .add(Integer.valueOf(id)),
-      ar -> {
-        connection.close();
-        if (ar.failed()) {
-          future.fail(ar.cause());
-        } else {
-          UpdateResult ur = ar.result();
-          if (ur.getUpdated() == 0) {
-            future.fail(new NoSuchElementException("No Employee with id " + id));
-          } else {
-            future.complete();
-          }
-        }
+        return pool.withTransaction(conn -> Future.all(
+          insert(conn, new Employee("Abhishek", "Software Engineer")),
+          insert(conn, new Employee("Sunil", "Release Manager"))
+        )).mapEmpty();
       });
-    return future;
   }
 
-  private Future<Void> delete(SQLConnection connection, String id) {
-    Future<Void> future = Future.future();
-    String sql = "DELETE FROM employees WHERE id = ?";
-    connection.updateWithParams(sql,
-      new JsonArray().add(Integer.valueOf(id)),
-      ar -> {
-        connection.close();
-        if (ar.failed()) {
-          future.fail(ar.cause());
-        } else {
-          if (ar.result().getUpdated() == 0) {
-            future.fail(new NoSuchElementException("Unknown Employee " + id));
-          } else {
-            future.complete();
-          }
+  private Future<Employee> insert(SqlClient client, Employee employee) {
+    return client.preparedQuery(INSERT)
+      .execute(Tuple.of(employee.getFullName(), employee.getDesignation()))
+      .map(rows -> {
+        Row keys = rows.property(JDBCPool.GENERATED_KEYS);
+        return new Employee(keys.getLong(0), employee.getFullName(), employee.getDesignation());
+      });
+  }
+
+  private Future<List<Employee>> query() {
+    return pool.query(SELECT_ALL).execute().map(MainVerticle::toEmployees);
+  }
+
+  private Future<Employee> queryOne(long id) {
+    return pool.preparedQuery(SELECT_ONE).execute(Tuple.of(id))
+      .map(rows -> {
+        List<Employee> employees = toEmployees(rows);
+        if (employees.isEmpty()) {
+          throw new NoSuchElementException("No Employee with id " + id);
         }
-      }
-    );
-    return future;
+        return employees.getFirst();
+      });
   }
 
-  private Future<SQLConnection> createTableIfNeeded(SQLConnection connection) {
-    Future<SQLConnection> future = Future.future();
-    vertx.fileSystem().readFile("table.sql", ar -> {
-      if (ar.failed()) {
-        future.fail(ar.cause());
-      } else {
-        connection.execute(ar.result().toString(),
-          ar2 -> future.handle(ar2.map(connection))
-        );
-      }
-    });
-    return future;
+  private Future<Void> update(long id, Employee employee) {
+    return pool.preparedQuery(UPDATE)
+      .execute(Tuple.of(employee.getFullName(), employee.getDesignation(), id))
+      .compose(rows -> rows.rowCount() == 0
+        ? Future.failedFuture(new NoSuchElementException("No Employee with id " + id))
+        : Future.succeededFuture());
   }
 
-  private Future<SQLConnection> createSomeDataIfNone(SQLConnection connection) {
-    Future<SQLConnection> future = Future.future();
-    connection.query("SELECT * FROM employees", select -> {
-      if (select.failed()) {
-        future.fail(select.cause());
-      } else {
-        if (select.result().getResults().isEmpty()) {
-          Employee Employee1 = new Employee("Abhishek",
-            "Software Engineer");
-          Employee Employee2 = new Employee("Sunil",
-            "Release Manager");
-          Future<Employee> insertion1 = insert(connection, Employee1, false);
-          Future<Employee> insertion2 = insert(connection, Employee2, false);
-          CompositeFuture.all(insertion1, insertion2)
-            .setHandler(r -> future.handle(r.map(connection)));
-        } else {
-          future.complete(connection);
-        }
-      }
-    });
-    return future;
+  private Future<Void> delete(long id) {
+    return pool.preparedQuery(DELETE).execute(Tuple.of(id))
+      .compose(rows -> rows.rowCount() == 0
+        ? Future.failedFuture(new NoSuchElementException("Unknown Employee " + id))
+        : Future.succeededFuture());
+  }
+
+  private static List<Employee> toEmployees(RowSet<Row> rows) {
+    List<Employee> employees = new ArrayList<>(rows.size());
+    for (Row row : rows) {
+      employees.add(new Employee(row.getLong(0), row.getString(1), row.getString(2)));
+    }
+    return employees;
   }
 
   // ---- HTTP Actions ----
 
   private void getAll(RoutingContext rc) {
-    connect()
-      .compose(this::query)
-      .setHandler(ok(rc));
-  }
-
-  private void addOne(RoutingContext rc) {
-    Employee Employee = rc.getBodyAsJson().mapTo(Employee.class);
-    connect()
-      .compose(connection -> insert(connection, Employee, true))
-      .setHandler(created(rc));
-  }
-
-  private void deleteOne(RoutingContext rc) {
-    String id = rc.pathParam("id");
-    connect()
-      .compose(connection -> delete(connection, id))
-      .setHandler(noContent(rc));
+    query()
+      .map(employees -> new JsonArray(employees.stream().map(Employee::toJson).toList()))
+      .onComplete(ok(rc));
   }
 
   private void getOne(RoutingContext rc) {
-    String id = rc.pathParam("id");
-    connect()
-      .compose(connection -> queryOne(connection, id))
-      .setHandler(ok(rc));
+    parseId(rc).compose(this::queryOne).map(Employee::toJson).onComplete(ok(rc));
+  }
+
+  private void addOne(RoutingContext rc) {
+    readEmployee(rc)
+      .compose(employee -> insert(pool, employee))
+      .map(Employee::toJson)
+      .onComplete(created(rc));
   }
 
   private void updateOne(RoutingContext rc) {
-    String id = rc.request().getParam("id");
-    Employee Employee = rc.getBodyAsJson().mapTo(Employee.class);
-    connect()
-      .compose(connection -> update(connection, id, Employee))
-      .setHandler(noContent(rc));
+    parseId(rc)
+      .compose(id -> readEmployee(rc).compose(employee -> update(id, employee)))
+      .onComplete(noContent(rc));
+  }
+
+  private void deleteOne(RoutingContext rc) {
+    parseId(rc).compose(this::delete).onComplete(noContent(rc));
+  }
+
+  private static Future<Long> parseId(RoutingContext rc) {
+    try {
+      return Future.succeededFuture(Long.parseLong(rc.pathParam("id")));
+    } catch (NumberFormatException e) {
+      return Future.failedFuture(new NoSuchElementException("Invalid Employee id " + rc.pathParam("id")));
+    }
+  }
+
+  private static Future<Employee> readEmployee(RoutingContext rc) {
+    try {
+      JsonObject body = rc.body().asJsonObject();
+      if (body == null) {
+        return Future.failedFuture(new IllegalArgumentException("Request body is required"));
+      }
+      Employee employee = new Employee(body);
+      if (employee.getFullName() == null || employee.getDesignation() == null) {
+        return Future.failedFuture(new IllegalArgumentException("fullName and designation are required"));
+      }
+      return Future.succeededFuture(employee);
+    } catch (RuntimeException e) {
+      return Future.failedFuture(new IllegalArgumentException("Invalid Employee payload", e));
+    }
   }
 }
